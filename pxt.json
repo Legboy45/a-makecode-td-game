@@ -7,11 +7,11 @@
         "arcade-character-animations": "github:microsoft/arcade-character-animations#v0.0.2",
         "Timers": "github:microsoft/arcade-timers#v1.1.0",
         "arcade-text": "github:microsoft/arcade-text#v1.3.0",
-        "Sprite Grid": "github:microsoft/arcade-grid#v1.3.0",
         "arcade-mini-menu": "github:riknoll/arcade-mini-menu#v0.0.1",
         "arcade-tilemap-a-star": "github:jwunderl/arcade-tilemap-a-star#v0.4.0",
         "arcade-sprite-util": "github:jwunderl/arcade-sprite-util#v0.4.1",
-        "arcade-sprite-data": "github:microsoft/arcade-sprite-data#v0.2.1"
+        "arcade-sprite-data": "github:microsoft/arcade-sprite-data#v0.2.1",
+        "arcade-shader": "github:riknoll/arcade-shader#d2a2572906fdb68ff429f337e30606b069e688ea"
     },
     "files": [
         "main.blocks",
@@ -19,13 +19,14 @@
         "README.md",
         "assets.json",
         "tilemap.g.jres",
-        "tilemap.g.ts"
+        "tilemap.g.ts",
+        "main.py"
     ],
     "testFiles": [
         "test.ts"
     ],
     "targetVersions": {
-        "target": "1.12.56",
+        "target": "1.12.57",
         "targetId": "arcade"
     },
     "supportedTargets": [
