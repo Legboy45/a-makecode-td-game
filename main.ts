@@ -5,27 +5,7 @@ namespace SpriteKind {
     export const Start = SpriteKind.create()
     export const Tower = SpriteKind.create()
 }
-sprites.onOverlap(SpriteKind.Projectile, SpriteKind.Enemy, function (sprite6, otherSprite4) {
-    sprites.destroy(sprite6)
-})
-// To-Do:
-// 
-// -Wave building
-// 
-// - Upgrading Towers
-// 
-// - Loadout system
-// 
-// - Shop (Buying new towers)
-// 
-// - Main menu
-sprites.onOverlap(SpriteKind.Enemy, SpriteKind.End, function (sprite, otherSprite) {
-    scene.cameraShake(2, 500)
-    sprites.destroy(sprite)
-    BaseHP.value += 0 - statusbars.getStatusBarAttachedTo(StatusBarKind.EnemyHealth, sprite).value
-    EnemysInWave += -1
-})
-function upgradeMenu () {
+function placementMenu () {
     UpgradeMenu = miniMenu.createMenu(
     miniMenu.createMenuItem(EquippedTowers[0]),
     miniMenu.createMenuItem(EquippedTowers[1]),
@@ -51,6 +31,66 @@ function upgradeMenu () {
     UpgradeMenu.onButtonPressed(controller.B, function (selection, selectedIndex) {
         sprites.destroy(UpgradeMenu)
         InUpgradeMenu = false
+    })
+}
+sprites.onOverlap(SpriteKind.Projectile, SpriteKind.Enemy, function (sprite6, otherSprite4) {
+    sprites.destroy(sprite6)
+})
+// To-Do:
+// 
+// -Wave building
+// 
+// - Upgrading Towers
+// 
+// - Loadout system
+// 
+// - Shop (Buying new towers)
+// 
+// - Main menu
+sprites.onOverlap(SpriteKind.Enemy, SpriteKind.End, function (sprite, otherSprite) {
+    scene.cameraShake(2, 500)
+    sprites.destroy(sprite)
+    BaseHP.value += 0 - statusbars.getStatusBarAttachedTo(StatusBarKind.EnemyHealth, sprite).value
+    EnemysInWave += -1
+})
+function upgradeMenu (Tower: Sprite) {
+    ShaderStacking = true
+    showTowerRange(Touchingtower, "#ffffff")
+    if (sprites.readDataNumber(Tower, "Level") != 5) {
+        UpgradeCostHUD = "Up:" + sprites.readDataNumber(Tower, "UpgradeCost") + "$"
+    } else {
+        UpgradeCostHUD = "MAXED"
+    }
+    UpgradeMenu = miniMenu.createMenu(
+    miniMenu.createMenuItem("Lvl:" + sprites.readDataNumber(Tower, "Level"), sprites.readDataImage(Tower, "UpgradeIcon")),
+    miniMenu.createMenuItem("Dmg:" + sprites.readDataNumber(Tower, "Damage")),
+    miniMenu.createMenuItem("Cd:" + sprites.readDataNumber(Tower, "Cooldown") / 1000),
+    miniMenu.createMenuItem("Range:" + sprites.readDataNumber(Tower, "Range")),
+    miniMenu.createMenuItem(UpgradeCostHUD),
+    miniMenu.createMenuItem("Sell")
+    )
+    UpgradeMenu.setFlag(SpriteFlag.RelativeToCamera, true)
+    UpgradeMenu.z = 5
+    UpgradeMenu.setPosition(30, 60)
+    UpgradeMenu.onButtonPressed(controller.A, function (selection, selectedIndex) {
+        if (selectedIndex == 4) {
+            TowerUpgradeIndex(sprites.readDataString(Touchingtower, "Name"), sprites.readDataNumber(Touchingtower, "Level") + 1)
+        } else if (selectedIndex == 5) {
+            tiles.setTileAt(Touchingtower.tilemapLocation(), sprites.castle.tileGrass1)
+            sprites.destroy(Touchingtower)
+            Money += sprites.readDataNumber(Touchingtower, "Cost") * 0.75
+            TowersPlaced += -1
+        }
+        sprites.destroy(UpgradeMenu)
+        InUpgradeMenu = false
+        sprites.destroy(range_shader)
+        ShaderStacking = false
+    })
+    UpgradeMenu.onButtonPressed(controller.B, function (selection, selectedIndex) {
+        sprites.destroy(UpgradeMenu)
+        InUpgradeMenu = false
+        sprites.destroy(range_shader)
+        ShaderStacking = false
     })
 }
 function playercreate () {
@@ -91,22 +131,33 @@ sprites.onDestroyed(SpriteKind.Enemy, function (sprite5) {
         }
     }
 })
-function createTower (Cost: number, Kind: string, Cooldown: number, Range: number, Damage: number, Icon: Image) {
+function createTower (Cost: number, Name: string, Cooldown: number, Range: number, Damage: number, Icon: Image, Level: number, Upgrading: boolean, UpgradeCost: number, UpgradeIcon: Image) {
     if (Money >= Cost) {
         if (TowersPlaced < MaxTowersPlaced) {
-            TowersPlaced += 1
+            if (Upgrading) {
+                sprites.destroy(Touchingtower)
+            } else {
+                TowersPlaced += 1
+            }
             newTower = sprites.create(Icon, SpriteKind.Tower)
             Money += 0 - Cost
-            sprites.setDataString(newTower, "Name", Kind)
+            sprites.setDataImageValue(newTower, "UpgradeIcon", UpgradeIcon)
+            sprites.setDataString(newTower, "Name", Name)
             sprites.setDataNumber(newTower, "Cooldown", Cooldown * 1000)
             sprites.setDataNumber(newTower, "Cost", Cost)
+            sprites.setDataNumber(newTower, "UpgradeCost", UpgradeCost)
             sprites.setDataNumber(newTower, "Range", Range)
+            sprites.setDataNumber(newTower, "Level", Level)
             sprites.setDataNumber(newTower, "Damage", Damage)
             sprites.setDataBoolean(newTower, "canAttack", true)
             tiles.placeOnTile(newTower, PlayerSprite.tilemapLocation())
             tiles.setTileAt(newTower.tilemapLocation(), sprites.castle.tileGrass3)
         } else {
-        	
+            InfoHUD.setText("Tower Limit!")
+            InfoHUD.setFlag(SpriteFlag.Invisible, false)
+            timer.after(750, function () {
+                InfoHUD.setFlag(SpriteFlag.Invisible, true)
+            })
         }
     } else {
         InfoHUD.setText("Need " + Math.round(Math.abs(Cost - Money)) + "$")
@@ -117,16 +168,605 @@ function createTower (Cost: number, Kind: string, Cooldown: number, Range: numbe
     }
     return newTower
 }
+function TowerUpgradeIndex (Name: string, Level: number) {
+    if (Name == "Sniper") {
+        if (Level == 2) {
+            createTower(250, "Sniper", 1.5, 75, 8, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . c c c c c . . . 
+                . . . . . . c c 5 5 5 5 5 c . . 
+                . . . . . c 5 5 5 5 5 5 5 5 c . 
+                . . . . c b b b b b b 5 5 5 c . 
+                . . . . c 1 1 b b 1 b b c c . . 
+                . . . c 1 1 1 b b 1 1 1 c . . . 
+                . . . c 1 1 1 1 b 1 1 1 c . c c 
+                . . . c d 1 f 1 b 1 1 1 b b 5 c 
+                . . c c d f f f b 1 b 1 5 5 5 c 
+                . c c d d 1 f 1 1 1 b 1 b b 5 c 
+                f d d d 1 1 1 1 1 b b 1 f . c c 
+                f f f 1 1 1 1 1 1 b b b f . . . 
+                . . . f f 1 1 1 b b b 5 5 f . . 
+                . . . . . f f f 5 5 5 5 5 f . . 
+                . . . . . . . . f f f f f f . . 
+                `, 2, true, 500, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 3) {
+            createTower(500, "Sniper", 1.5, 75, 10, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . c c c c c . . . 
+                . . . . . . c c 5 5 5 5 5 c . . 
+                . . . . . c 5 5 5 5 5 5 5 5 c . 
+                . . . . c b b b b b b 5 5 5 c . 
+                . . . . c 1 1 b b 1 b b c c . . 
+                . . . c 1 1 1 b b 1 1 1 c . . . 
+                . . . c 1 1 1 1 b 1 1 1 c . c c 
+                . . . c d 1 f 1 b 1 1 1 b b 5 c 
+                . . f c d f f f b 1 b 1 5 5 5 c 
+                . f f f d 1 f 1 1 1 b 1 b b 5 c 
+                f f f f 1 1 1 1 1 b b 1 f . c c 
+                f f f f f 1 1 1 1 b b b f . . . 
+                . . . f f 1 1 1 b b b 5 5 f . . 
+                . . . . . f f f 5 5 5 5 5 f . . 
+                . . . . . . . . f f f f f f . . 
+                `, 3, true, 1100, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 4) {
+            createTower(1100, "Sniper", 1.7, 90, 17, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . c c c c c . . . 
+                . . . . . . c c 5 5 5 5 5 c . . 
+                . . . . . c 5 5 5 5 5 5 5 5 c . 
+                . . . . c b b b b b b 5 5 5 c . 
+                . . . . c 1 1 b b 1 b b c c . . 
+                . . . f 1 1 1 b b 1 1 1 c . . . 
+                . . . 6 f f f 1 b 1 1 1 c . c c 
+                . . . 6 6 6 6 f b 1 1 1 b b 5 c 
+                . . f f 6 6 6 f b 1 b 1 5 5 5 c 
+                . f f d f f f 1 1 1 b 1 b b 5 c 
+                f f f f 1 1 1 1 1 b b 1 f . c c 
+                f f f f f 1 1 1 1 b b b f . . . 
+                . . . f f 1 1 1 b b b 5 5 f . . 
+                . . . . . f f f 5 5 5 5 5 f . . 
+                . . . . . . . . f f f f f f . . 
+                `, 4, true, 1950, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 5) {
+            createTower(1950, "Sniper", 1, 90, 45, img`
+                . . . . . f f f f f f . . . . . 
+                . . . . f c c c c c c f f . . . 
+                . . . f c c c c c c c c c f . . 
+                . . . f c f f f f f c c c f . . 
+                . . . f f b b b b b f c c c f . 
+                . . . . c 1 1 b b 1 b f c c f . 
+                . . . f 1 1 1 b b 1 1 1 f f f . 
+                . . . 6 f f f 1 b 1 1 1 c . c c 
+                . . . 6 6 6 6 f b 1 1 1 b b 5 c 
+                . . f f 6 6 6 f b 1 b 1 5 5 5 c 
+                . f f d f f f 1 1 1 b 1 b b 5 c 
+                f f f f 1 1 1 1 1 b b 1 f . c c 
+                f f f f f 1 1 1 1 b b b f . . . 
+                . . . f f 1 1 1 b b b 5 5 f . . 
+                . . . . . f f f 5 5 5 5 5 f . . 
+                . . . . . . . . f f f f f f . . 
+                `, 5, true, 0, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        }
+    } else if (Name == "Scout") {
+        if (Level == 2) {
+            createTower(100, "Scout", 0.6, 50, 4, img`
+                . . . . . . . . . . . . . . . . 
+                . e e e . . . . e e e . . . . . 
+                . c d d c . . c d d c . . . . . 
+                . c b d d f f d d b c . . . . . 
+                . c 3 b d d b d b 3 c . . . . . 
+                . f b 3 d d d d 3 b f . . . . . 
+                . e d d d d d d d d e b f b . . 
+                . e d f d d d d f d e f d f . . 
+                . f d f f d d f f d f f d f . . 
+                . f b d d b b d d 2 f f d f . . 
+                . . f 2 2 2 2 2 2 b b f d f . . 
+                . . f b d d d d d d b d b f . . 
+                . . f d d d d d b d d f f . . . 
+                . . f d f f f d f f d f . . . . 
+                . . f f . . f f . . f f . . . . 
+                . . . . . . . . . . . . . . . . 
+                `, 2, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . f f f . . . . . . . . . . . . 
+                f c c c f f f f . . . . . . . . 
+                f c c c c c c c f f f f . . . . 
+                f c c c c c c c c c c 1 f f f . 
+                f c c c c c c c c c 1 1 c c 1 f 
+                f c c c c c c c c 1 1 c c 1 c f 
+                . f c c c c c c 1 1 c c 1 c c f 
+                . . f c c c c f 1 c c 1 c c f . 
+                . . . f f f f . f c 1 c c f . . 
+                . . . . . . . . . f f f f . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 3) {
+            createTower(0, "Scout", 0.5, 55, 10, img`
+                . . . . . . . . . . . . . . . . 
+                . e e e . . . . e e e . . . . . 
+                . c d d c . . c d d c . . . . . 
+                . c b d d f f d d b c . . . . . 
+                . c 3 b d d b d b 3 c . . . . . 
+                . f b 3 d d d d 3 b f . . . . . 
+                . e d d d d d d d d e . . . . . 
+                . e f f f f f f f f e . b f b . 
+                . f d f f d d f f d f . f d f . 
+                . f b d d b b d d 2 f . f d f . 
+                . . f 2 2 2 2 2 2 b b f f d f . 
+                . . f b d d d d d d b b d b f . 
+                . . f d d d d d b d d f f f . . 
+                . . f d f f f d f f d f . . . . 
+                . . f f . . f f . . f f . . . . 
+                . . . . . . . . . . . . . . . . 
+                `, 3, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . f f f . f f f . f f . . . . 
+                . f c c c f c c c f c c f . . . 
+                . . f c c c f c c c f c c f . . 
+                . . f c c c f c c c f c c f . . 
+                . . f c c c f c c c f c c f . . 
+                . . f c c c c c c c c c c f . . 
+                . . . f c c c c c c c c f . . . 
+                . . . f c c c c c c c c f . . . 
+                . . . f c c c c c c c c f . . . 
+                . . . . f c c c c c c f . . . . 
+                . . . . f c c c c c c f . . . . 
+                . . . . f f f f f f f f . . . . 
+                . . . . c c c c c c c c c . . . 
+                . . . . f f f f f f f f . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 4) {
+            createTower(0, "Scout", 0.5, 65, 10, img`
+                . . . . . . . . . . . . . . . . 
+                . e e e . . . . e e e . . . . . 
+                . c d d c . . c d d c . . . . . 
+                . c b d d f f d d b c . . . . . 
+                . c 3 b d d b d b 3 c . . . . . 
+                . f b 3 d d d d 3 b f . . . . . 
+                . e d d d d d d d d e . . . . . 
+                . e f f f f f f f f e . b f b . 
+                . f d f f d d f f d f . f d f . 
+                . f b d d b b d d 2 f . f d f . 
+                . . f 2 2 2 2 2 2 b b f f d f . 
+                . . f b d d d d d d b b d b f . 
+                . . f f d d d f b d f f f f . . 
+                . . f c f f f c f f c f . . . . 
+                . . f f . . f f . . f f . . . . 
+                . . . . . . . . . . . . . . . . 
+                `, 4, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 5) {
+            createTower(0, "Scout", 0.33, 70, 15, img`
+                . . . . . . . . . . . . . . . . 
+                . e e e . . . . e e e . . . . . 
+                . c d d c . . c d d c . . . . . 
+                . c b d d f f d d b c . . . . . 
+                . c 3 b d d b d b 3 c . . . . . 
+                . f b 3 d d d d 3 b f . . . . . 
+                . e d d d d d d d d e . . . . . 
+                . e f f f f f f f f e . b f b . 
+                . f f f f f f f f f f . f c f . 
+                . f b d d b b d d 2 f . f c f . 
+                . . f 2 2 2 2 2 2 b b f f c f . 
+                . . f b d d d d d d b c c c f . 
+                . . f f d d d f b d f f f f . . 
+                . . f f f f f f f f f f . . . . 
+                . f f f . f f f . . f f f . . . 
+                . f f f . f f f . . f f f . . . 
+                `, 5, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        }
+    } else if (Name == "Poison") {
+        if (Level == 2) {
+            createTower(100, "Scout", 0.6, 50, 4, img`
+                . . . . . . . . . . . . . . . . 
+                . e e e . . . . e e e . . . . . 
+                . c d d c . . c d d c . . . . . 
+                . c b d d f f d d b c . . . . . 
+                . c 3 b d d b d b 3 c . . . . . 
+                . f b 3 d d d d 3 b f . . . . . 
+                . e d d d d d d d d e b f b . . 
+                . e d f d d d d f d e f d f . . 
+                . f d f f d d f f d f f d f . . 
+                . f b d d b b d d 2 f f d f . . 
+                . . f 2 2 2 2 2 2 b b f d f . . 
+                . . f b d d d d d d b d b f . . 
+                . . f d d d d d b d d f f . . . 
+                . . f d f f f d f f d f . . . . 
+                . . f f . . f f . . f f . . . . 
+                . . . . . . . . . . . . . . . . 
+                `, 2, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 3) {
+            createTower(0, "Scout", 1.5, 75, 10, img`
+                . . . . . . . . . . . . . . . . 
+                . e e e . . . . e e e . . . . . 
+                . c d d c . . c d d c . . . . . 
+                . c b d d f f d d b c . . . . . 
+                . c 3 b d d b d b 3 c . . . . . 
+                . f b 3 d d d d 3 b f . . . . . 
+                . e d d d d d d d d e . . . . . 
+                . e f f f f f f f f e . b f b . 
+                . f d f f d d f f d f . f d f . 
+                . f b d d b b d d 2 f . f d f . 
+                . . f 2 2 2 2 2 2 b b f f d f . 
+                . . f b d d d d d d b b d b f . 
+                . . f d d d d d b d d f f f . . 
+                . . f d f f f d f f d f . . . . 
+                . . f f . . f f . . f f . . . . 
+                . . . . . . . . . . . . . . . . 
+                `, 3, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 4) {
+            createTower(0, "Scout", 1.7, 90, 17, img`
+                . . . . . . . . . . . . . . . . 
+                . e e e . . . . e e e . . . . . 
+                . c d d c . . c d d c . . . . . 
+                . c b d d f f d d b c . . . . . 
+                . c 3 b d d b d b 3 c . . . . . 
+                . f b 3 d d d d 3 b f . . . . . 
+                . e d d d d d d d d e . . . . . 
+                . e f f f f f f f f e . b f b . 
+                . f d f f d d f f d f . f d f . 
+                . f b d d b b d d 2 f . f d f . 
+                . . f 2 2 2 2 2 2 b b f f d f . 
+                . . f b d d d d d d b b d b f . 
+                . . f f d d d f b d f f f f . . 
+                . . f c f f f c f f c f . . . . 
+                . . f f . . f f . . f f . . . . 
+                . . . . . . . . . . . . . . . . 
+                `, 4, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 5) {
+            createTower(0, "Scout", 0.25, 125, 45, img`
+                . . . . . . . . . . . . . . . . 
+                . e e e . . . . e e e . . . . . 
+                . c d d c . . c d d c . . . . . 
+                . c b d d f f d d b c . . . . . 
+                . c 3 b d d b d b 3 c . . . . . 
+                . f b 3 d d d d 3 b f . . . . . 
+                . e d d d d d d d d e . . . . . 
+                . e f f f f f f f f e . b f b . 
+                . f f f f f f f f f f . f c f . 
+                . f b d d b b d d 2 f . f c f . 
+                . . f 2 2 2 2 2 2 b b f f c f . 
+                . . f b d d d d d d b c c c f . 
+                . . f f d d d f b d f f f f . . 
+                . . f f f f f f f f f f . . . . 
+                . f f f . f f f . . f f f . . . 
+                . f f f . f f f . . f f f . . . 
+                `, 5, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        }
+    } else if (Name == "Gunner") {
+        if (Level == 2) {
+            createTower(500, "Gunner", 0.6, 50, 4, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . c c c c . . . . 
+                . . . . . . c c d d d d c . . . 
+                . . . . . c c c c c c d c . . . 
+                . . . . c c 4 4 4 4 d c c . . . 
+                . . . c 4 d 4 4 4 4 4 1 c . c c 
+                . . c 4 4 4 1 4 4 4 4 d 1 c 4 c 
+                . c 4 4 4 4 1 4 4 4 4 4 1 c 4 c 
+                f 4 4 4 4 4 1 4 4 4 4 4 1 4 4 f 
+                f 4 4 4 f 4 1 c c 4 4 4 1 f 4 f 
+                f 4 4 4 4 4 1 4 4 f 4 4 d f 4 f 
+                . f 4 4 4 4 1 c 4 f 4 d f f f f 
+                . . f f 4 d 4 4 f f 4 c f c . . 
+                . . . . f f 4 4 4 4 c d b c . . 
+                . . . . . . f f f f d d d c . . 
+                . . . . . . . . . . c c c . . . 
+                `, 2, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 3) {
+            createTower(0, "Gunner", 1.5, 75, 10, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . c c c c . . . . 
+                . . . . . . c c d d d d c . . . 
+                . . . . . c c c c c c d c . . . 
+                . . . . c c 4 4 4 4 d c c . . . 
+                . . . c 4 d 4 4 4 4 4 1 c . c c 
+                . . c 4 4 4 1 4 4 4 4 d 1 c 4 c 
+                . c 4 4 4 4 1 4 4 4 4 4 1 c 4 c 
+                f 4 4 4 4 4 1 4 4 4 4 4 1 4 4 f 
+                f 4 4 4 f 4 1 c c 4 4 4 1 f 4 f 
+                f 4 4 4 4 4 1 4 4 f 4 4 d f 4 f 
+                . f 4 4 4 4 1 c 4 f 4 d f f f f 
+                . . f f 4 d 4 4 f f 4 c f c . . 
+                . . . . f f 4 4 4 4 c d b c . . 
+                . . . . . . f f f f d d d c . . 
+                . . . . . . . . . . c c c . . . 
+                `, 3, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . f f f . f f f . f f . . . . 
+                . f c c c f c c c f c c f . . . 
+                . . f c c c f c c c f c c f . . 
+                . . f c c c f c c c f c c f . . 
+                . . f c c c f c c c f c c f . . 
+                . . f c c c c c c c c c c f . . 
+                . . . f c c c c c c c c f . . . 
+                . . . f c c c c c c c c f . . . 
+                . . . f c c c c c c c c f . . . 
+                . . . . f c c c c c c f . . . . 
+                . . . . f c c c c c c f . . . . 
+                . . . . f f f f f f f f . . . . 
+                . . . . c c c c c c c c c . . . 
+                . . . . f f f f f f f f . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 4) {
+            createTower(0, "Gunner", 1.7, 90, 17, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . c c c c . . . . 
+                . . . . . . c c d d d d c . . . 
+                . . . . . c c c c c c d c . . . 
+                . . . . c c 4 4 4 4 d c c . . . 
+                . . . c 4 d 4 4 4 4 4 1 c . c c 
+                . . c 4 4 4 1 4 4 4 4 d 1 c 4 c 
+                . c 4 4 4 4 1 4 4 4 4 4 1 c 4 c 
+                f 4 4 4 4 4 1 4 4 4 4 4 1 4 4 f 
+                f 4 4 4 f 4 1 c c 4 4 4 1 f 4 f 
+                f 4 4 4 4 4 1 4 4 f 4 4 d f 4 f 
+                . f 4 4 4 4 1 c 4 f 4 d f f f f 
+                . . f f 4 d 4 4 f f 4 c f c . . 
+                . . . . f f 4 4 4 4 c d b c . . 
+                . . . . . . f f f f d d d c . . 
+                . . . . . . . . . . c c c . . . 
+                `, 4, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        } else if (Level == 5) {
+            createTower(0, "Gunner", 0.08, 125, 45, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . c c c c . . . . 
+                . . . . . . c c d d d d c . . . 
+                . . . . . c c c c c c d c . . . 
+                . . . . c c 4 4 4 4 d c c . . . 
+                . . . c 4 d 4 4 4 4 4 1 c . c c 
+                . . c 4 4 4 1 4 4 4 4 d 1 c 4 c 
+                . c 4 4 4 4 1 4 4 4 4 4 1 c 4 c 
+                f 4 4 4 4 4 1 4 4 4 4 4 1 4 4 f 
+                f 4 4 4 f 4 1 c c 4 4 4 1 f 4 f 
+                f 4 4 4 4 4 1 4 4 f 4 4 d f 4 f 
+                . f 4 4 4 4 1 c 4 f 4 d f f f f 
+                . . f f 4 d 4 4 f f 4 c f c . . 
+                . . . . f f 4 4 4 4 c d b c . . 
+                . . . . . . f f f f d d d c . . 
+                . . . . . . . . . . c c c . . . 
+                `, 5, true, 1, img`
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                . . . . . . . . . . . . . . . . 
+                `)
+        }
+    } else {
+    	
+    }
+}
 controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
     if (PlayerSprite.tileKindAt(TileDirection.Center, sprites.castle.tileGrass1)) {
         if (!(InUpgradeMenu)) {
-            upgradeMenu()
+            placementMenu()
             InUpgradeMenu = true
         }
     } else if (PlayerSprite.tileKindAt(TileDirection.Center, sprites.castle.tileGrass3)) {
         if (!(ShaderStacking)) {
-            ShaderStacking = true
-            showTowerRange(Touchingtower, "#ffffff")
+            upgradeMenu(Touchingtower)
+            InUpgradeMenu = true
         }
     }
 })
@@ -149,6 +789,23 @@ function TowerIndex (Name: string) {
             . . . f f 1 1 1 b b b 5 5 f . . 
             . . . . . f f f 5 5 5 5 5 f . . 
             . . . . . . . . f f f f f f . . 
+            `, 1, false, 250, img`
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . f f f f f f f f . . . . 
+            . . f f 1 1 1 1 1 1 1 1 f f . . 
+            . . f 1 1 1 1 1 1 1 1 1 1 f . . 
+            . f 1 1 1 1 1 1 1 1 f 1 1 1 f . 
+            . f 1 1 1 1 1 1 1 1 f 1 1 1 f . 
+            . f 1 1 1 1 1 1 1 f f f 1 1 f . 
+            . f 1 1 f 1 1 f f f 2 f f f f . 
+            . f 1 1 1 1 1 1 1 f f f 1 1 f . 
+            . f 1 1 1 1 1 1 1 1 f 1 1 1 f . 
+            . f 1 1 1 1 1 1 1 1 f 1 1 1 f . 
+            . . f 1 1 1 1 1 1 1 1 1 1 f . . 
+            . . f f 1 1 1 1 1 1 1 1 f f . . 
+            . . . . f f f f f f f f . . . . 
+            . . . . . . . . . . . . . . . . 
             `)
     } else if (Name == "Scout") {
         createTower(250, "Scout", 0.6, 50, 2, img`
@@ -166,6 +823,23 @@ function TowerIndex (Name: string) {
             . f d d d d d b d d f f f . 
             . f d f f f d f f d f . . . 
             . f f . . f f . . f f . . . 
+            `, 1, false, 100, img`
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . f f . . . . . . . 
+            . . . . . f f d d f f . . . . . 
+            . . . . f d d b b d d f . . . . 
+            . . . . f d b b b b b f . . . . 
+            . . . f d b b b b b b c f . . . 
+            . . . f d b b b b b b c f . . . 
+            . . . . f b b b b b c f . . . . 
+            . . . . f c c b b c c f . . . . 
+            . . . . . f f c c f f . . . . . 
+            . . . . . . . f f . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
             `)
     } else if (Name == "Poison") {
         createTower(350, "Poison", 0.6, 40, 3, img`
@@ -185,9 +859,26 @@ function TowerIndex (Name: string) {
             f 6 1 1 1 1 1 6 6 6 6 6 c f . . 
             . f 6 1 1 1 1 1 1 6 6 6 f . . . 
             . . c c c c c c c c c f . . . . 
+            `, 1, false, 300, img`
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
             `)
     } else if (Name == "Gunner") {
-        createTower(1250, "Gunner", 0.18, 75, 2, img`
+        createTower(1250, "Gunner", 0.33, 75, 2, img`
             . . . . . . . . . . . . . . . . 
             . . . . . . . . c c c c . . . . 
             . . . . . . c c d d d d c . . . 
@@ -204,6 +895,23 @@ function TowerIndex (Name: string) {
             . . . . f f 4 4 4 4 c d b c . . 
             . . . . . . f f f f d d d c . . 
             . . . . . . . . . . c c c . . . 
+            `, 1, false, 500, img`
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
+            . . . . . . . . . . . . . . . . 
             `)
     } else if (false) {
     	
@@ -614,9 +1322,9 @@ statusbars.onZero(StatusBarKind.Health, function (status) {
     game.setGameOverMessage(false, "We took too much damage!")
     game.gameOver(false)
 })
-function createEnemy (HP: number, Speed: number, Name2: string, Icon2: Image, Defense: number, Boss: boolean) {
-    NewEnemy = sprites.create(Icon2, SpriteKind.Enemy)
-    sprites.setDataString(NewEnemy, "Name", Name2)
+function createEnemy (HP: number, Speed: number, Name: string, Icon: Image, Defense: number, Boss: boolean, Hidden: boolean) {
+    NewEnemy = sprites.create(Icon, SpriteKind.Enemy)
+    sprites.setDataString(NewEnemy, "Name", Name)
     sprites.setDataNumber(NewEnemy, "Defense", Defense)
     sprites.setDataNumber(NewEnemy, "Speed", Speed)
     EnemyHPBar = statusbars.create(20, 4, StatusBarKind.EnemyHealth)
@@ -694,12 +1402,6 @@ function hud () {
 }
 sprites.onOverlap(SpriteKind.Player, SpriteKind.Tower, function (sprite2, otherSprite2) {
     Touchingtower = otherSprite2
-    if (controller.B.isPressed() && !(InUpgradeMenu)) {
-        tiles.setTileAt(otherSprite2.tilemapLocation(), sprites.castle.tileGrass1)
-        sprites.destroy(otherSprite2)
-        Money += sprites.readDataNumber(otherSprite2, "Cost") * 0.75
-        TowersPlaced += -1
-    }
 })
 function Waves () {
     Wave += 1
@@ -735,7 +1437,7 @@ function Waves () {
                     . . f 8 8 8 8 8 8 8 8 8 8 f . . 
                     . . . f f f f f f f f f f . . . 
                     . . . . . . . . . . . . . . . . 
-                    `, 2, false)
+                    `, 2, true, true)
                 pause(500)
             }
         })
@@ -761,7 +1463,7 @@ function Waves () {
                     . . f 8 8 8 8 8 8 8 8 8 8 f . . 
                     . . . f f f f f f f f f f . . . 
                     . . . . . . . . . . . . . . . . 
-                    `, 1, false)
+                    `, 1, true, true)
                 pause(500)
             }
         })
@@ -787,7 +1489,7 @@ function Waves () {
                     . . f 8 8 8 8 8 8 8 8 8 8 f . . 
                     . . . f f f f f f f f f f . . . 
                     . . . . . . . . . . . . . . . . 
-                    `, 1, false)
+                    `, 1, true, true)
                 pause(500)
             }
         })
@@ -810,7 +1512,7 @@ function Waves () {
                     . . . . . . . . . . . . . . . . 
                     . . . . . . . . . . . . . . . . 
                     . . . . . . . . . . . . . . . . 
-                    `, 1, false)
+                    `, 1, true, true)
                 pause(500)
             }
         })
@@ -836,7 +1538,7 @@ function Waves () {
                     . . . . . . . . . . . . . . . . 
                     . . . . . . . . . . . . . . . . 
                     . . . . . . . . . . . . . . . . 
-                    `, 1, false)
+                    `, 1, true, true)
                 pause(500)
             }
         })
@@ -862,7 +1564,7 @@ function Waves () {
                     . f c c c c c c c c c c c d f . 
                     . . f f f f f f f f f f f f . . 
                     . . . . . . . . . . . . . . . . 
-                    `, 1, false)
+                    `, 1, true, true)
                 pause(500)
             }
         })
@@ -888,7 +1590,7 @@ function Waves () {
                     . f c c c c c c c c c c c d f . 
                     . . f f f f f f f f f f f f . . 
                     . . . . . . . . . . . . . . . . 
-                    `, 1, false)
+                    `, 1, true, true)
                 pause(750)
             }
         })
@@ -911,7 +1613,7 @@ function Waves () {
                     . . . . . . . . . . . . . . . . 
                     . . . . . . . . . . . . . . . . 
                     . . . . . . . . . . . . . . . . 
-                    `, 1, false)
+                    `, 1, true, true)
                 pause(500)
             }
         })
@@ -935,7 +1637,7 @@ function Waves () {
             . . . . . . . . . . . . . . . . 
             . . . . . . . . . . . . . . . . 
             . . . . . . . . . . . . . . . . 
-            `, 1, true)
+            `, 1, true, true)
     } else if (Wave == 8) {
         Money += 1200
     } else if (Wave == 9) {
@@ -970,7 +1672,7 @@ function Waves () {
             f c 2 2 2 2 2 2 2 2 2 2 2 2 3 f 
             f c c c c c c c c c c c c c 3 f 
             f f f f f f f f f f f f f f f f 
-            `, 1, true)
+            `, 1, true, true)
     } else if (Wave == 16) {
         game.setGameOverMessage(true, "We've survived the enemy rush!")
         game.gameOver(true)
@@ -1017,20 +1719,21 @@ let TimerHUD: TextSprite = null
 let MoneyHUD: TextSprite = null
 let EnemyHPBar: StatusBarSprite = null
 let NewEnemy: Sprite = null
-let range_shader: Sprite = null
-let Touchingtower: Sprite = null
-let ShaderStacking = false
 let InfoHUD: TextSprite = null
 let newTower: Sprite = null
 let MaxTowersPlaced = 0
+let Target: Sprite = null
+let range_shader: Sprite = null
 let TowersPlaced = 0
 let Money = 0
-let Target: Sprite = null
+let UpgradeCostHUD = ""
+let Touchingtower: Sprite = null
+let ShaderStacking = false
+let EnemysInWave = 0
+let BaseHP: StatusBarSprite = null
 let InUpgradeMenu = false
 let EquippedTowers: string[] = []
 let UpgradeMenu: miniMenu.MenuSprite = null
-let EnemysInWave = 0
-let BaseHP: StatusBarSprite = null
 let wall: Sprite = null
 let PlayerSprite: Sprite = null
 let item: tiles.Location[] = []
@@ -1105,6 +1808,48 @@ for (let value3 of tiles.getTilesByType(assets.tile`myTile11`)) {
     tiles.placeOnTile(wall, value3)
 }
 game.onUpdate(function () {
+    for (let value5 of sprites.allOfKind(SpriteKind.Tower)) {
+        if (sprites.readDataString(value5, "Name") != "Flame") {
+            Target = spriteutils.getSpritesWithin(SpriteKind.Enemy, sprites.readDataNumber(value5, "Range"), value5)[0]
+            if (Target && sprites.readDataBoolean(value5, "canAttack")) {
+                projectile = sprites.createProjectileFromSprite(img`
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . f f . . . . . . . 
+                    . . . . . . f c c f . . . . . . 
+                    . . . . . . f c c f . . . . . . 
+                    . . . . . . . f f . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    . . . . . . . . . . . . . . . . 
+                    `, value5, 0, 0)
+                projectile.follow(Target, 650)
+                projectile.lifespan = 1500
+                projectile.setFlag(SpriteFlag.GhostThroughWalls, true)
+                sprites.setDataBoolean(value5, "canAttack", false)
+                statusbars.getStatusBarAttachedTo(StatusBarKind.EnemyHealth, Target).value += 0 - sprites.readDataNumber(value5, "Damage")
+                if (statusbars.getStatusBarAttachedTo(StatusBarKind.EnemyHealth, Target).value <= 0) {
+                    Money += statusbars.getStatusBarAttachedTo(StatusBarKind.EnemyHealth, Target).max * 0.45
+                    sprites.destroy(Target)
+                    EnemysInWave += -1
+                }
+                timer.after(sprites.readDataNumber(value5, "Cooldown"), function () {
+                    sprites.setDataBoolean(value5, "canAttack", true)
+                })
+            }
+        } else {
+        	
+        }
+    }
+})
+game.onUpdate(function () {
     if ((EnemysInWave == 0 || Timer == 0) && !(Intermission)) {
         Timer = 5
         Intermission = true
@@ -1124,44 +1869,6 @@ game.onUpdate(function () {
     WaveHUD.setText("Wave " + ("" + Wave))
 })
 game.onUpdate(function () {
-    for (let value5 of sprites.allOfKind(SpriteKind.Tower)) {
-        Target = spriteutils.getSpritesWithin(SpriteKind.Enemy, sprites.readDataNumber(value5, "Range"), value5)[0]
-        if (Target && sprites.readDataBoolean(value5, "canAttack")) {
-            sprites.setDataBoolean(value5, "canAttack", false)
-            projectile = sprites.createProjectileFromSprite(img`
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . f f . . . . . . . 
-                . . . . . . f c c f . . . . . . 
-                . . . . . . f c c f . . . . . . 
-                . . . . . . . f f . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                . . . . . . . . . . . . . . . . 
-                `, value5, 0, 0)
-            projectile.follow(Target, 350)
-            projectile.lifespan = 1500
-            projectile.setFlag(SpriteFlag.GhostThroughWalls, true)
-            statusbars.getStatusBarAttachedTo(StatusBarKind.EnemyHealth, Target).value += 0 - sprites.readDataNumber(value5, "Damage")
-            if (statusbars.getStatusBarAttachedTo(StatusBarKind.EnemyHealth, Target).value <= 0) {
-                Money += statusbars.getStatusBarAttachedTo(StatusBarKind.EnemyHealth, Target).max * 0.45
-                sprites.destroy(Target)
-                EnemysInWave += -1
-            }
-            timer.after(sprites.readDataNumber(value5, "Cooldown"), function () {
-                sprites.setDataBoolean(value5, "canAttack", true)
-            })
-        }
-    }
-})
-game.onUpdate(function () {
     if (InUpgradeMenu) {
         controller.moveSprite(PlayerSprite, 0, 0)
     } else {
@@ -1169,10 +1876,5 @@ game.onUpdate(function () {
     }
 })
 game.onUpdate(function () {
-    if (range_shader) {
-        if (!(PlayerSprite.overlapsWith(Touchingtower))) {
-            sprites.destroy(range_shader)
-            ShaderStacking = false
-        }
-    }
+	
 })
